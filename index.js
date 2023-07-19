@@ -7,11 +7,12 @@ require('dotenv').config();
 const authRoute = require('./routes/auth.route.js');
 const { errorHandler,notFound } = require('./middlewares/errorHandler');
 const PORT = process.env.PORT || 3001;
-
+const cookieParser = require('cookie-parser');
 dbConnect();
 //app.use(express.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
+app.use(cookieParser);
 
 app.use('/api/user', authRoute);
 
