@@ -1,4 +1,5 @@
 const asyncHandler = require('express-async-handler');
+const jwt = require('jsonwebtoken');
 const User = require('../models/User.model.js');
 const { generateToken } = require('../config/jwtToken.js');
 const { generateRefreshToken } = require('../config/refreshToken.js');
@@ -30,9 +31,9 @@ class AuthController {
 			
 			if(findUser && (await findUser.isPasswordMatch(password))){
 				const { _id, password, ...rest } = findUser._doc;
-				const token  =  generateToken(_id);
+				const token  =  await generateToken(_id);
 				const refreshToken = await generateRefreshToken(_id);
-				const updateUser = await User.findByIdAndUpdate(id,{
+				await User.findByIdAndUpdate(_id,{
 					refreshToken},{new:true});
 				res.cookie('refreshToken', refreshToken,{
 					httpOnly: true,
@@ -40,7 +41,11 @@ class AuthController {
 				})
 				res.status(200).json({
 					msg: "Fetch successfully",
-					data: {_id, ...rest, token}
+					data: {
+						_id, 
+						...rest, 
+						token
+					}
 				})
 			}else{
 				res.status(401).json({
@@ -53,7 +58,44 @@ class AuthController {
 		}
 	});
 
-	handleRefreshToken = asyncHandler(async(req, res) => {});
+	handleRefreshToken = asyncHandler(async(req, res) => {
+		const  cookie = req.cookies;
+		if(!cookie?.refreshToken) throw new Error("No Refresh token in Cookies");
+		const refreshToken = cookie.refreshToken;
+		const user = await User.findOne({refreshToken});
+		if(!user) throw new Error("No Refresh token matched");
+		await jwt.verify(refreshToken, process.env.JWT_SECRET, (err, decoded) => {
+			if(err || user.id !== decoded.id) throw new Error("Refresh token not valid");
+			const accessToken =  generateToken(user.id);
+			res.json({accessToken});
+
+		})
+	});
+
+
+	logout = asyncHandler(async (req, res) => {
+		const cookie = req.cookies;
+		if(!cookie?.refreshToken) throw new Error("No Refresh token in Cookies");
+		const refreshToken = cookie.refreshToken;
+		const user = await User.findOne({refreshToken});
+		if(!user) {
+			res.clearCookie("refreshToken",{
+				httpOnly: true,
+				secure: true,
+			});
+			return res.sendStatus(204);
+		}
+
+		await User.findOneAndUpdate({refreshToken}, {
+			refreshToken: ""
+		});
+		res.clearCookie("refreshToken",{
+			httpOnly: true,
+			secure: true,
+		});
+
+		return res.sendStatus(204);
+	});
 
 	getAllUsers = asyncHandler(async (req, res) => {
 		try{
@@ -162,6 +204,40 @@ class AuthController {
 				msg: "User unblocked successfully",
 				data: unblock
 			});
+			
+		}catch(err){
+			throw new Error(error)
+		}
+	});
+
+	updatePassword = asyncHandler(async (req, res) => {
+		console.log(req,"req");
+
+		// if(!req.user){
+		// 	return res.status(401).json({
+		// 		msg: "User not authenticated",
+		// 	})
+		// }
+		//const { _id } = req.user;
+		//const password = req.body.password;
+		//validateMongodbId(_id);
+		try {
+			console.log("Password");
+			// const user = await User.findById(_id);
+			// if(password){
+			// 	user.password = password;
+			// 	const updatedPassword = await user.save();
+			// 	res.status(200).json({
+			// 		msg: "Password Changed successfully",
+			// 		data: updatedPassword
+			// 	})
+			// }else{
+			// 	res.status(200).json(user)
+			// }
+			// // res.status(200).json({
+			// // 	msg: "User unblocked successfully",
+			// // 	data: unblock
+			// // });
 			
 		}catch(err){
 			throw new Error(error)
