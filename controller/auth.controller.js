@@ -1,6 +1,8 @@
 const asyncHandler = require('express-async-handler');
 const jwt = require('jsonwebtoken');
+const crypto = require("crypto");
 const User = require('../models/User.model.js');
+const sendMail = require('../config/sendMail.js');
 const { generateToken } = require('../config/jwtToken.js');
 const { generateRefreshToken } = require('../config/refreshToken.js');
 const validateMongodbId = require('../utils/validateMongodbId.js');
@@ -15,9 +17,8 @@ class AuthController {
 			const newUser = await User.create(req.body);
 			res.status(201).json({
 				msg: "Register successfully",
-				data: newUser,
+				result: newUser,
 				success: true,
-				status: 201
 			});
 		}else{
 			throw new Error("User already exists");
@@ -211,37 +212,99 @@ class AuthController {
 	});
 
 	updatePassword = asyncHandler(async (req, res) => {
-		console.log(req,"req");
-
-		// if(!req.user){
-		// 	return res.status(401).json({
-		// 		msg: "User not authenticated",
-		// 	})
-		// }
-		//const { _id } = req.user;
-		//const password = req.body.password;
-		//validateMongodbId(_id);
-		try {
-			console.log("Password");
-			// const user = await User.findById(_id);
-			// if(password){
-			// 	user.password = password;
-			// 	const updatedPassword = await user.save();
-			// 	res.status(200).json({
-			// 		msg: "Password Changed successfully",
-			// 		data: updatedPassword
-			// 	})
-			// }else{
-			// 	res.status(200).json(user)
-			// }
-			// // res.status(200).json({
-			// // 	msg: "User unblocked successfully",
-			// // 	data: unblock
-			// // });
-			
-		}catch(err){
-			throw new Error(error)
+		if (!req.user) {
+		  return res.status(401).json({
+			msg: "User not authenticated",
+		  });
 		}
+	  
+		const { _id } = req.user;
+		const { password } = req.body;
+	  
+		try {
+		  validateMongodbId(_id); // Validate ObjectID
+	  
+		  const user = await User.findById(_id);
+		  if (!user) {
+			return res.status(404).json({
+			  msg: "User not found",
+			});
+		  }
+	  
+		  if (password) {
+			user.password = password;
+			const updatedUser = await user.save();
+
+			const { password: updatedPassword, ...rest } = updatedUser.toObject();
+	  
+			return res.status(200).json({
+			  msg: "Password changed successfully",
+			  data: rest,
+			});
+		  } else {
+			return res.status(200).json(user);
+		  }
+		} catch (err) {
+		  console.error(err);
+		  return res.status(500).json({
+			msg: "An error occurred",
+		  });
+		}
+	  });
+
+	forgotPassToken = asyncHandler(async (req, res) => {
+		const { email } = req.body;
+		
+		try {
+			const user = await User.findOne({ email: email});
+			if(!user) {
+				return res.status(404).json({
+					msg: "User not found",
+				});
+			}
+
+			
+			const token = await user.createPasswordResetToken();
+			await user.save();
+			const resetUrl = `Hi here is your reset password link, this link is valid till 10 minutes from now. <a href="http://localhost:5000/api/user/reset-password/${token}">Click here</a>`;
+			const firstname = user.firstname;
+			const data = {
+				to: email,
+				text: `Hey ${firstname}`,
+				subject: 'Your reset password link',
+				htm: resetUrl,
+			}
+			await sendMail(data);
+			res.status(200).json({
+				msg: "token sent to mail",
+				data: token,
+			  });
+		} catch (error) {
+			throw new Error(error);	
+		}
+	});
+
+	resetPassword = asyncHandler(async (req, res) => {
+		const { password } = req.body;
+		const {token} = req.params;
+		const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+		const user = await User.findOne({
+			passwordResetToken: hashedToken,
+			passwordResetExpires: { $gt: Date.now() },
+		});
+		if(!user) {
+			return res.status(404).json({
+				msg: "Token Expired, try again later",
+			  });
+		}
+		user.password = password;
+		user.passwordResetToken = undefined;
+		user.passwordResetExpires = undefined;
+		await user.save();
+		return res.status(200).json({
+			msg:" Password reset successfully",
+			data:user
+		})
 	});
 }
 
