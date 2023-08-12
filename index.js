@@ -1,13 +1,17 @@
 
 const express = require('express');
+const helmet = require('helmet');
 const colors = require('colors');
+const swaggerUi = require('swagger-ui-express');
 const bodyParser = require('body-parser');
 const cookieParser = require('cookie-parser');
 const morgan = require('morgan');
 const dbConnect = require('./config/dbConnect');
+const specs = require('./config/swagger.js'); 
 //const Category = require('./models/Category.model');
 const authRoute = require('./routes/auth.route.js');
 const productRoute = require('./routes/product.route.js');
+const blogRoute = require('./routes/blog.route.js');
 const { errorHandler,notFound } = require('./middlewares/errorHandler');
 const app = express();
 require('dotenv').config();
@@ -36,9 +40,13 @@ app.use(morgan('dev'));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(cookieParser());
-
+// Use Helmet middleware
+app.use(helmet());
+// Serve Swagger UI at /api-docs route
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
 app.use('/api/user', authRoute);
 app.use('/api/product', productRoute);
+app.use('/api/blog', blogRoute);
 
 app.use(notFound);
 app.use(errorHandler);

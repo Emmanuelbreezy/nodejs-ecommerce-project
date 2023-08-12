@@ -1,3 +1,13 @@
+// routes/product.route.js
+
+/**
+ * @swagger
+ * tags:
+ *   name: Product
+ *   description: Product endpoints
+ */
+
+
 const express = require('express');
 const router = express.Router();
 const ProductController = require("../controller/product.controller.js");
