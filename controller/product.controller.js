@@ -385,6 +385,10 @@ class ProductController {
         const {id} = req.params;
         validateMongodbId(id);
         try {
+            const product = await Product.findById(id);
+            if (!product) {
+                return res.status(404).json({ msg: 'product not found' });
+            }
             const files = req.files;
             //const uploader = (path) => cloudinaryUploadFile(path, "images");
             // const urls = [];
@@ -421,11 +425,10 @@ class ProductController {
                 { concurrency: 5 } // Adjust concurrency to control parallelism
               );
             
-            console.log(uploadedUrls)
-            const findProduct = await Product.findByIdAndUpdate(id,{
-                images: uploadedUrls
-            },{new:true});
-            res.json(findProduct);
+            product.images = uploadedUrls;
+            await product.save();
+
+            res.json(product);
 
         } catch (error) {
             throw new Error(error);

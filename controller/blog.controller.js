@@ -160,18 +160,34 @@ class BlogController {
         const {id} = req.params;
         validateMongodbId(id);
         try {
-            const files = req.files;
-            const uploadPromises = files.map(file => {
-                cloudinaryUploadFile(file.path, "images");
-                fs.unlinkSync(file.path);
-            });
-            const uploadedResults = await Promise.all(uploadPromises);
-            const urls = uploadedResults.map(file => file);
+            const blog = await Blog.findById(id);
+            if (!blog) {
+                return res.status(404).json({ msg: 'blog not found' });
+            }
 
-            const findBlog = await Blog.findByIdAndUpdate(id,{
-                images: urls
-            },{new:true});
-            res.json(findBlog);
+            const files = req.files;
+            const { default: pMap } = await import('p-map');
+            const uploadedUrls = await pMap(
+                files,
+                async (file) => {
+                  try {
+                    const url = await cloudinaryUploadFile(file.path);
+                    fs.unlinkSync(file.path); // Remove the file after uploading
+                    return url;
+                  } catch (error) {
+                    console.error(`Error uploading file: ${error.message}`);
+                    return null; // Handle the error as needed
+                  }
+                },
+                { concurrency: 5 } // Adjust concurrency to control parallelism
+              );
+            // const findBlog = await Blog.findByIdAndUpdate(id,{
+            //     images: uploadedUrls
+            // },{new:true});
+            
+            blog.images = uploadedUrls;
+            await blog.save();
+            res.json(blog);
 
         } catch (error) {
             throw new Error(error);
