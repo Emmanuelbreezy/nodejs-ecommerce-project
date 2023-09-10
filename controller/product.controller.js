@@ -1,10 +1,14 @@
+const fs = require('fs');
 const mongoose = require('mongoose');
 const asyncHandler = require('express-async-handler');
 const slugify = require('slugify');
 const Product = require('../models/Product.model.js');
 const Colors = require('../models/Color.model.js');
 const Brand = require('../models/Brand.model.js');
+const User = require('../models/User.model.js');
 const Category = require('../models/Category.model.js');
+const validateMongodbId = require('../utils/validateMongodbId.js');
+const cloudinaryUploadFile = require('../utils/cloudinary.js');
 
 
 
@@ -280,6 +284,218 @@ class ProductController {
             throw new Error(err);
         }
     });
+
+
+    addToWishList = asyncHandler(async (req, res) => {
+        const { _id } = req.user;
+        const { productId } = req.body;
+
+        try{
+            const user = await User.findById(_id);
+            if (!user) {
+                return res.status(404).json({ msg: 'user not found' });
+            }
+
+            const alreadyAdded = user?.wishList?.find((id) => id.toString() === productId.toString());
+
+            if(alreadyAdded){
+                let user = await User.findByIdAndUpdate(_id, {
+                    $pull: { wishList: productId}
+                },{new: true});
+                res.json(user);
+            }else{
+                let user = await User.findByIdAndUpdate(_id, {
+                    $push: { wishList: productId}
+                },{new: true}).populate('wishList');
+                res.json(user);
+            }
+
+        } catch(err){
+            throw new Error(err);
+        }
+    });
+
+
+    //ChatGPT CODE UPDATE
+    rating = asyncHandler(async (req, res) => {
+        const { _id } = req.user;
+        const { star, comment, productId } = req.body;
+
+        try{
+            const product = await Product.findById(productId);
+            if (!product) {
+                return res.status(404).json({ msg: 'product not found' });
+            }
+
+            const alreadyRatedIndex = product?.ratings?.findIndex((rating) => rating.postedby.toString() === _id.toString());
+            if(alreadyRatedIndex !== -1){
+                product.ratings[alreadyRatedIndex].star = star;
+                product.ratings[alreadyRatedIndex].comment = comment;
+                await product.save();
+                // await Product.updateOne(
+                //     {
+                //         ratings: { $elemMatch: alreadyAdded},
+                //     },
+                //     {
+                //         $set: { "ratings.$.star": star },
+                //     },
+                //     {
+                //         new: true,
+                //     }
+                // );
+            }else{
+                product.ratings.push({
+                    star: star,
+                    comment:comment,
+                    postedby: _id
+                });
+                await product.save();
+                // await Product.findByIdAndUpdate(productId, {
+                //     $push: { 
+                //         ratings: {
+                //             star: star,
+                //             postedby: _id
+                //         }
+                //     }
+                // },{new: true}).populate('ratings');
+            }
+
+            // Calculate the average rating
+            // const getAllRatings = await Product.findById(productId);
+            //let totalRating = getAllRatings.ratings.length;
+            
+            const totalRatings = product.ratings.length;
+            let ratingSum = product.ratings
+                .map((rating) => rating.star)
+                .reduce((acc, rating) => acc + rating, 0);
+            const averageRating = Math.round(ratingSum / totalRatings);
+        
+            // Update the product's totalRating
+            product.totalRating = averageRating;
+            await product.save();
+
+            res.json({ msg: 'Rating updated successfully', product });
+        } catch(err){
+            throw new Error(err);
+        }
+    });
+
+
+    uploadImages = asyncHandler(async (req, res) => {
+        const {id} = req.params;
+        validateMongodbId(id);
+        try {
+            const product = await Product.findById(id);
+            if (!product) {
+                return res.status(404).json({ msg: 'product not found' });
+            }
+            const files = req.files;
+            //const uploader = (path) => cloudinaryUploadFile(path, "images");
+            // const urls = [];
+            // for (const file of files) {
+            //     const {path} = file;
+            //     const newPath = await uploader(path);
+            //     urls.push(newPath);
+            //     fs.unlinkSync(file.path);
+
+            // }
+            //images: urls.map((file) => file),
+
+            //CHATGPT CODE
+            // const uploadPromises = files.map(file => cloudinaryUploadFile(file.path, "images"));
+            // const uploadedResults = await Promise.all(uploadPromises);
+            // const urls = uploadedResults.map(file => file)
+            
+            //UPDATED CHATGPT CODE BCOS  fs.unlink
+            // Dynamically import pMap here
+            const { default: pMap } = await import('p-map');
+
+            const uploadedUrls = await pMap(
+                files,
+                async (file) => {
+                  try {
+                    const url = await cloudinaryUploadFile(file.path);
+                    fs.unlinkSync(file.path); // Remove the file after uploading
+                    return url;
+                  } catch (error) {
+                    console.error(`Error uploading file: ${error.message}`);
+                    return null; // Handle the error as needed
+                  }
+                },
+                { concurrency: 5 } // Adjust concurrency to control parallelism
+              );
+            
+            product.images = uploadedUrls;
+            await product.save();
+
+            res.json(product);
+
+        } catch (error) {
+            throw new Error(error);
+        }
+    })
+    
 }
 
 module.exports =  ProductController;
+
+
+
+
+
+
+
+
+
+
+
+//Tutorial Way
+// rating = asyncHandler(async (req, res) => {
+//     const { _id } = req.user;
+//     const { star, productId } = req.body;
+
+//     try{
+//         const product = await Product.findById(productId);
+//         if (!product) {
+//             return res.status(404).json({ msg: 'product not found' });
+//         }
+
+//         const alreadyAdded = product?.ratings?.find((userId) => userId.postedby.toString() === _id.toString());
+//         if(alreadyAdded){
+//             await Product.updateOne(
+//                 {
+//                     ratings: { $elemMatch: alreadyAdded},
+//                 },
+//                 {
+//                     $set: { "ratings.$.star": star },
+//                 },
+//                 {
+//                     new: true,
+//                 }
+//             );
+//         }else{
+//             await Product.findByIdAndUpdate(productId, {
+//                 $push: { 
+//                     ratings: {
+//                         star: star,
+//                         postedby: _id
+//                     }
+//                 }
+//             },{new: true}).populate('ratings');
+//         }
+
+//         const getAllRatings = await Product.findById(productId);
+//         let totalRating = getAllRatings.ratings.length;
+//         let ratingSum = getAllRatings.ratings
+//             .map((item) => item.star)
+//             .reduce((acc, rating) => acc + rating, 0);
+//         let actualRating = Math.round(ratingSum / totalRating);
+//         const result =  await Product.findByIdAndUpdate(productId, {
+//             totalRating: actualRating
+//         },{new:true});
+
+//         res.json(result);
+//     } catch(err){
+//         throw new Error(err);
+//     }
+// });

@@ -1,6 +1,7 @@
 const User = require('../models/User.model');
 const jwt = require('jsonwebtoken');
 const asyncHandler = require('express-async-handler');
+const { roles } = require('../utils/roles');
 
 const authMiddleware = asyncHandler(async (req, res, next) => {
 	let token;
@@ -25,10 +26,13 @@ const authMiddleware = asyncHandler(async (req, res, next) => {
 const isAdmin = asyncHandler(async (req, res, next) => {
 	const { email } = req.user;
 	const adminUser = await User.findOne({email: email});
-	if(adminUser.role !== 'admin'){
-		throw new Error('Not authorized');
-	}else{
+	if (!adminUser) {
+		throw new Error('User not found'); // Handle the case where the user is not found
+	  }
+	if(adminUser.role === roles.admin){
 		next();
+	}else{
+		throw new Error('Not authorized');
 	}
 });
 

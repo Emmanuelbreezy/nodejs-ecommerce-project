@@ -6,6 +6,7 @@ const sendMail = require('../config/sendMail.js');
 const { generateToken } = require('../config/jwtToken.js');
 const { generateRefreshToken } = require('../config/refreshToken.js');
 const validateMongodbId = require('../utils/validateMongodbId.js');
+const { roles } = require('../utils/roles.js');
 
 
 class AuthController {
@@ -14,6 +15,10 @@ class AuthController {
 		const email = req.body.email;
 		const findUser = await User.findOne({ email: email });
 		if(!findUser){
+			const data = req.body;
+			if(!data.role) {
+				data.role = roles.user
+			}
 			const newUser = await User.create(req.body);
 			res.status(201).json({
 				msg: "Register successfully",
@@ -138,6 +143,26 @@ class AuthController {
 				res.status(200).json({
                     msg: "Delete user successfully",
                 })
+			}else{
+				throw new Error("User does not exist");
+			}
+		}catch(err){
+			throw new Error(err);
+		}
+	});
+
+
+	// Save user addresses
+	saveAddress = asyncHandler(async (req, res) => {
+		const { _id } = req.user;
+		validateMongodbId(_id);
+		try{
+			const updatedUser = await User.findByIdAndUpdate(_id, {
+				address: req?.body?.address,
+			},{new: true})
+			
+			if(updatedUser){
+				res.status(200).json(updatedUser)
 			}else{
 				throw new Error("User does not exist");
 			}
@@ -305,6 +330,16 @@ class AuthController {
 			msg:" Password reset successfully",
 			data:user
 		})
+	});
+
+	getWishList = asyncHandler(async (req, res) => {
+		const { _id } = req.user;
+		try{
+			const findUser = await User.findById(_id).populate('wishList'); 
+			res.json(findUser);
+		}catch(error){
+			throw new Error(error);	
+		}
 	});
 }
 

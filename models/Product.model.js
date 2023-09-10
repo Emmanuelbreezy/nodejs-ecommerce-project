@@ -30,18 +30,20 @@ const productSchema = new mongoose.Schema({
         default: 0,
 		select: false
     },
-    images: {
-        type: Array,
-        default: []
-    },
+    images: [],
     colors: [{ 
 			type: mongoose.Schema.Types.ObjectId, 
 			ref: 'Colors' 
 	  }],
     ratings: [{
             star: Number,
+			comment: String,
             postedby: { type: mongoose.Schema.Types.ObjectId, ref: "User"},
     }],
+	totalRating:{
+		type: String,
+		default: 0
+	},
 	category: {
 		type:mongoose.Schema.Types.ObjectId,
         ref: "Category",
