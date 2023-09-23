@@ -2,6 +2,8 @@ const asyncHandler = require('express-async-handler');
 const jwt = require('jsonwebtoken');
 const crypto = require("crypto");
 const User = require('../models/User.model.js');
+const Cart = require('../models/Cart.model.js');
+const Product = require('../models/Product.model.js');
 const sendMail = require('../config/sendMail.js');
 const { generateToken } = require('../config/jwtToken.js');
 const { generateRefreshToken } = require('../config/refreshToken.js');
@@ -25,7 +27,7 @@ class AuthController {
 				result: newUser,
 				success: true,
 			});
-		}else{
+		} else {
 			throw new Error("User already exists");
 		}
 	});
@@ -334,6 +336,8 @@ class AuthController {
 
 	getWishList = asyncHandler(async (req, res) => {
 		const { _id } = req.user;
+		validateMongodbId(_id);
+
 		try{
 			const findUser = await User.findById(_id).populate('wishList'); 
 			res.json(findUser);
@@ -341,6 +345,81 @@ class AuthController {
 			throw new Error(error);	
 		}
 	});
+
+	userCart = asyncHandler(async (req, res) => {
+		const { cart } = req.body;
+		const { _id } = req.user;
+		validateMongodbId(_id);
+		try{
+			let products = [];
+			const user = await User.findById(_id);
+			if(!user) {
+				return res.status(404).json({msg: "User not found"});
+			}
+			const alreadyExistCart = await Cart.findOne({ orderby: user._id });
+			if(alreadyExistCart){
+				alreadyExistCart.deleteOne();
+			}
+
+			for( let i = 0; i < cart.length; i++ ) {
+				let object = {};
+				object.Product = cart[i]._id;
+				object.count = cart[i].count;
+				object.color = cart[i].color;
+				let getPrice = await Product.findById(cart[i]._id).select('price').exec();
+				object.price = getPrice.price;
+				products.push(object);
+			}
+
+			const cartTotal = products.reduce((total, product) => total + product.price * product.count, 0);
+
+
+			const newCart = await Cart.create({
+				products,
+				cartTotal,
+				orderby: user?._id,
+			});
+
+			res.json(newCart);
+
+		}catch(error){
+			throw new Error(error);	
+		}
+	});
+
+	getUserCart = asyncHandler(async (req, res) => {
+		const { _id } = req.user;
+		validateMongodbId(_id);
+
+		try{
+			const cart = await Cart.findOne({orderby: _id}).populate("products.product", "color"); 
+			res.json(cart);
+		}catch(error){
+			throw new Error(error);	
+		}
+	});
+
+	emptyCart = asyncHandler(async (req, res) => {
+		const { _id } = req.user;
+		validateMongodbId(_id);
+		try{
+			const user = await User.findOne({_id });
+			if(!user) {
+				return res.status(404).json({msg: "User not found"});
+			}
+			
+			const cart = await Cart.findOneAndRemove({
+				orderby: user._id,
+			});
+			res.json(cart);
+		}catch(error){
+			throw new Error(error);	
+		}
+	});
 }
+
+
+
+
 
 module.exports =  AuthController;
